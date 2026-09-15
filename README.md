@@ -40,3 +40,10 @@ Connect Supabase authentication, database records, role-based access and image s
 - `.openai/hosting.json`: private Sites deployment configuration
 
 The static `dist` directory can also be hosted by any static website provider.
+
+## Vercel deployment
+
+Import this repository with the Root Directory set to the repository root.
+The included `vercel.json` selects the Other framework preset, skips the build
+step and serves `dist`. Deploy the latest `main` commit. No environment variables
+or install step are required for this prototype.
