@@ -14,18 +14,20 @@ Open http://localhost:4173.
 
 ## Included
 
-- Searchable sample inventory with category, condition and price filters
-- Saved equipment and detailed listing dialogs
-- Seller assessment form with validation and local photo previews
-- Acquisition pipeline and sample offer acceptance
-- Original 3D-style device renders and an exploded component explorer
-- Responsive layouts, keyboard-accessible controls and optional WebMCP tools
+- Seller-first homepage with eligibility guidance and a staged acquisition journey
+- Short seller enquiries with multiple device types, photo previews and inventory attachments
+- Seller request tracking, technical follow-up, document attachments and sample quote acceptance
+- Separate staff demo with status history, inspection notes, collection details and final disposition
+- Internal acquisition, transport, parts and labour estimates with expected contribution calculation
+- Enquiry-led category catalogue with search, saved devices and recorded demo buying enquiries
+- Four distinct exploded illustrations: patient monitor, infusion pump, centrifuge and defibrillator
+- Responsive layouts and validated optional WebMCP catalogue/enquiry actions
 
 ## Prototype boundaries
 
-Inventory, prices and acquisition records are demonstration data. Saved items and submitted assessments are held only in memory and reset on reload. Photo previews stay in the browser; no uploads, messages, payments or pickups are sent or arranged. Authentication and a shared database are not connected.
+Inventory, prices and acquisition records are demonstration data. Saved items and submitted assessments are held only in memory and reset on reload. Photos and inventory/document attachments stay in memory in the browser tab and can be downloaded during that session; no server uploads, messages, payments or pickups are sent or arranged. The staff view is explicitly a public demo, not a protected admin area. Authentication and a shared database are not connected.
 
-Device images are AI-generated conceptual illustrations, not manufacturer-specific CAD or service instructions. Sample refurbishment labels do not certify actual equipment.
+Device images are AI-generated conceptual illustrations, not manufacturer-specific CAD or service instructions. Device categories do not represent live stock or certified equipment. Medicycle remains a working name; this prototype is not affiliated with the Australian reference business.
 
 ## Next phase
 
