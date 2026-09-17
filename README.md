@@ -1,51 +1,71 @@
 # Medicycle
 
-A responsive medical-equipment marketplace prototype for acquiring retired devices, assessing refurbishment potential and recovering usable parts.
+A medical-equipment acquisition app with a seller portal, restricted staff workspace, Supabase authentication/database/private storage, and WhatsApp contact.
 
 ## Run locally
 
-No build step or package installation is required. From the repository root:
+Requires Node.js 22 or newer and Python 3 for the preview server.
 
 ```sh
-python3 -m http.server 4173 --directory dist
+npm ci
+npm run build
+npm run preview
 ```
 
-Open http://localhost:4173.
+Open http://localhost:4173. Edit `src/app.js` and `src/backend.js`, then rebuild. `dist/app.js` is generated, not the source of truth.
 
-## Included
+## Supabase setup — required before accepting enquiries
 
-- Seller-first homepage with eligibility guidance and a staged acquisition journey
-- Short seller enquiries with multiple device types, photo previews and inventory attachments
-- Seller request tracking, technical follow-up, document attachments and sample quote acceptance
-- Separate staff demo with status history, inspection notes, collection details and final disposition
-- Internal acquisition, transport, parts and labour estimates with expected contribution calculation
-- Enquiry-led category catalogue with search, saved devices and recorded demo buying enquiries
-- Four distinct exploded illustrations: patient monitor, infusion pump, centrifuge and defibrillator
-- Responsive layouts and validated optional WebMCP catalogue/enquiry actions
+Project: `pdharysamdzcxxcjvlcm`. Only its browser-safe publishable configuration is in `config/supabase.public.json`. No service-role key or database password is used.
 
-## Prototype boundaries
+1. Open the project's **SQL Editor → New query**. Run `supabase/migrations/001_medicycle.sql` once. It creates the application tables, authorization rules, validated mutation functions and private `mc-documents` bucket.
+2. Run `supabase/migrations/002_preserve_accepted_offers.sql`. If you already ran migration 001, do not run it again; proceed with 002.
+3. Under **Authentication → URL Configuration**, set the Site URL to `https://medicycle-rho.vercel.app` and add `https://medicycle-rho.vercel.app/` to allowed redirect URLs. For local testing, add `http://localhost:4173/`.
+4. Enable email sign-in and new signups in Authentication. Configure a production SMTP provider to deliver login links to customers; Supabase's default mail service has restrictions and is not a production mail provider. Use the standard magic-link email template. Users must open links in the same browser that requested them (PKCE).
+5. Sign in through the app with your intended staff email. In the SQL Editor, replace the placeholder below with that email and run:
 
-Inventory, prices and acquisition records are demonstration data. Saved items and submitted assessments are held only in memory and reset on reload. Photos and inventory/document attachments stay in memory in the browser tab and can be downloaded during that session; no server uploads, messages, payments or pickups are sent or arranged. The staff view is explicitly a public demo, not a protected admin area. Authentication and a shared database are not connected.
+```sql
+insert into public.mc_staff_members (user_id)
+select id from auth.users where lower(email) = lower('YOUR_STAFF_EMAIL')
+on conflict (user_id) do nothing;
+```
 
-Device images are AI-generated conceptual illustrations, not manufacturer-specific CAD or service instructions. Device categories do not represent live stock or certified equipment. Medicycle remains a working name; this prototype is not affiliated with the Australian reference business.
+Confirm that one matching user exists, then sign out and in again to see the Staff workspace. Customers cannot grant themselves staff access. To remove access, delete only that user's row from `mc_staff_members` in the SQL Editor.
 
-## Next phase
+## Deployment on Vercel
 
-Connect Supabase authentication, database records, role-based access and image storage. Define seller and assessor permissions before accepting real submissions. Add inspected-unit documentation, real equipment photography, quote management and collection scheduling as production workflows.
+The root `vercel.json` runs `npm ci` and `npm run build`, then serves `dist`. The connected GitHub `main` branch triggers deployment.
 
-## Files
+The checked-in publishable configuration is sufficient for this project. To override it, set either `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel. For local overrides, copy `.env.example` to `.env`. Rebuild after changing configuration. Never place a Supabase secret/service-role key in public configuration; the build rejects these keys.
 
-- `dist/index.html`: application views
-- `dist/style.css`: responsive design
-- `dist/app.js`: sample data and interactions
-- `dist/assets/`: generated device artwork
-- `.openai/hosting.json`: private Sites deployment configuration
+## Features
 
-The static `dist` directory can also be hosted by any static website provider.
+- Floating WhatsApp panel and contextual contact links to **+91 76768 88427**. Links open a draft in WhatsApp; they never send messages automatically.
+- Email magic-link authentication, persistent sessions and sign-out.
+- Server-persisted seller requests, multiple equipment types, saved device categories and buying enquiries.
+- Private documents and photos using short-lived signed download URLs.
+- Seller technical updates, chronological stage history, written offers and explicit acceptance confirmation.
+- Staff-only assessments, internal cost estimates, collection arrangements and disposition records.
+- Request ownership enforced by Postgres row-level security; staff costs/notes stored separately.
+- Version checks prevent stale edits or acceptance of changed offers. Accepted offer terms are immutable, including when put on hold.
+- Idempotent intake and buying enquiry creation, validated server-side input and basic per-account enquiry limits.
+- Four illustrative exploded device categories; no fictional live stock or automatic certification claims.
 
-## Vercel deployment
+## Validation
 
-Import this repository with the Root Directory set to the repository root.
-The included `vercel.json` selects the Other framework preset, skips the build
-step and serves `dist`. Deploy the latest `main` commit. No environment variables
-or install step are required for this prototype.
+```sh
+npm test
+npm run build
+```
+
+Database tests run against embedded PostgreSQL (PGlite) with Supabase auth/storage schema fixtures. They cover owner isolation, staff restrictions, anonymous access denial, offer rules, storage ownership, idempotency and validation. They do not substitute for testing the actual Supabase Auth email delivery or Storage service.
+
+Before opening to customers, run an end-to-end check with two customer accounts and a staff account: sign in, submit a request, upload/download an attachment, confirm the other customer cannot see it, issue/accept an offer and sign out. Apply both migrations first.
+
+## Operating boundaries
+
+- No payments, automatic email notifications of enquiries, shipping integrations or live stock management are implemented. Staff check the acquisition queue and contact customers via the provided contact details/WhatsApp.
+- The workspace currently loads the newest 200 requests and buying enquiries. Larger operations will need pagination/search across older records.
+- Files are private but are not malware-scanned. Supported formats are constrained to images, PDF, CSV and XLSX; never upload patient information.
+- Equipment acceptance, inspection, collection coverage, sale terms and refurbishment suitability are handled by the business. Illustrations are not manufacturer service diagrams.
+- Medicycle remains the working brand and is not affiliated with the Australian reference business.
