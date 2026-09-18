@@ -13,6 +13,19 @@ const saved=new Set();let savedOnly=false,activeDevice=0,toastTimer,rowCounter=0
 let requests=[];
 let submissionId=null;let intakePhotos=[],inventoryFile=null;
 function toast(text){$('#toast').textContent=text;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),4200)}
+function celebrateSignup(){
+ view('home');
+ $('#signup-celebration')?.remove();
+ const banner=document.createElement('section');banner.id='signup-celebration';banner.className='signup-celebration';banner.setAttribute('role','status');
+ banner.innerHTML='<span class="party-popper" aria-hidden="true">🎉</span><div><strong>Congratulations!</strong><p>Account created successfully. Welcome to Medicycle!</p></div><button type="button" aria-label="Dismiss welcome message">×</button>';
+ banner.querySelector('button').onclick=()=>banner.remove();document.body.append(banner);
+ if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  const confetti=document.createElement('div');confetti.className='signup-confetti';confetti.setAttribute('aria-hidden','true');
+  for(let i=0;i<36;i++){const piece=document.createElement('i');piece.style.cssText=`--x:${(i*37)%100}vw;--delay:${(i%7)*.07}s;--turn:${i%2?720:-540}deg;background:${['#1f7760','#e8bc54','#e78475','#8da9e0'][i%4]}`;confetti.append(piece);}
+  document.body.append(confetti);setTimeout(()=>confetti.remove(),3500);
+ }
+ setTimeout(()=>banner.remove(),6500);
+}
 function view(v){
  if(!['home','sell','market','requests','staff'].includes(v))throw Error('Unknown view');
  if(['sell','requests','staff'].includes(v)&&!requireSignIn())return 'sign-in';
@@ -156,7 +169,7 @@ function openAuthForm(mode){
    const name=String(data.get('name')||'').trim();if(signup&&!name)throw new Error('Please enter your name.');
    const result=signup?await DB.signUp(name,email,password):await DB.signIn(email,password);
    if(!result.session){feedback.textContent='Your account needs email confirmation. Check your inbox, then sign in.';return;}
-   form.reset();$('#info-dialog').close();toast(signup?'Your account is ready. Welcome to Medicycle!':'You’re signed in.');
+   form.reset();$('#info-dialog').close();if(signup)celebrateSignup();else{view('home');toast('You’re signed in.');}
   }catch(error){feedback.textContent=error.message;}
  },e.submitter);};
 }
