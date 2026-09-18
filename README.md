@@ -21,7 +21,7 @@ Project: `pdharysamdzcxxcjvlcm`. Only its browser-safe publishable configuration
 1. Open the project's **SQL Editor → New query**. Run `supabase/migrations/001_medicycle.sql` once. It creates the application tables, authorization rules, validated mutation functions and private `mc-documents` bucket.
 2. Run `supabase/migrations/002_preserve_accepted_offers.sql`. If you already ran migration 001, do not run it again; proceed with 002.
 3. Under **Authentication → URL Configuration**, set the Site URL to `https://medicycle-rho.vercel.app` and add `https://medicycle-rho.vercel.app/` to allowed redirect URLs. For local testing, add `http://localhost:4173/`.
-4. Enable email sign-in and new signups in Authentication. Configure a production SMTP provider to deliver login links to customers; Supabase's default mail service has restrictions and is not a production mail provider. Use the standard magic-link email template. Users must open links in the same browser that requested them (PKCE).
+4. Enable email/password sign-in and new signups in Authentication. Turn **Confirm email OFF** in the Authentication email/signup settings to allow immediate signup without verification. This is a dashboard setting; the public app key cannot change it. You can turn it back on later; the app handles confirmation-required responses. Configure a production SMTP provider for forgotten-password emails and keep the standard reset-password email template. Open reset links in the same browser that requested them (PKCE). Existing magic-link users can use Forgot password to set their first password.
 5. Sign in through the app with your intended staff email. In the SQL Editor, replace the placeholder below with that email and run:
 
 ```sql
@@ -41,7 +41,7 @@ The checked-in publishable configuration is sufficient for this project. To over
 ## Features
 
 - Floating WhatsApp panel and contextual contact links to **+91 76768 88427**. Links open a draft in WhatsApp; they never send messages automatically.
-- Email magic-link authentication, persistent sessions and sign-out.
+- Name/email/password signup, password sign-in, forgotten-password recovery, persistent sessions and sign-out. Names are stored in Supabase Auth user metadata; passwords are managed only by Supabase Auth.
 - Server-persisted seller requests, multiple equipment types, saved device categories and buying enquiries.
 - Private documents and photos using short-lived signed download URLs.
 - Seller technical updates, chronological stage history, written offers and explicit acceptance confirmation.

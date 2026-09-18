@@ -6,7 +6,8 @@ export const configured = Boolean(url && key);
 export const client = configured ? createClient(url, key, {
   auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 }) : null;
-export const state = { user: null, staff: false, ready: false };
+export const state = { user: null, staff: false, ready: false, recovery: false };
+client?.auth.onAuthStateChange(event => { if(event === "PASSWORD_RECOVERY") state.recovery = true; });
 
 function checked(result) {
   if (result.error) throw new Error(result.error.message || 'The request could not be completed.');
@@ -30,13 +31,26 @@ function requireUser() {
   if (!state.user || !state.ready) throw new Error('Please sign in and try again.');
   return state.user;
 }
-export async function signIn(email) {
+function authClient() {
   if (!client) throw new Error('Online accounts are being set up. You can reach us on WhatsApp.');
-  checked(await client.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.origin+'/'}}));
+  return client.auth;
+}
+export async function signIn(email,password) {
+  return checked(await authClient().signInWithPassword({email,password}));
+}
+export async function signUp(name,email,password) {
+  return checked(await authClient().signUp({email,password,options:{data:{full_name:name},emailRedirectTo:window.location.origin+'/'}}));
+}
+export async function forgotPassword(email) {
+  checked(await authClient().resetPasswordForEmail(email,{redirectTo:window.location.origin+'/'}));
+}
+export async function resetPassword(password) {
+  checked(await authClient().updateUser({password}));
+  state.recovery=false;
 }
 export async function signOut() {
   if(client) checked(await client.auth.signOut({scope:'local'}));
-  state.user=null; state.staff=false;
+  state.user=null; state.staff=false; state.recovery=false;
 }
 export async function loadData() {
   const user=requireUser();

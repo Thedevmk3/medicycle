@@ -129,12 +129,36 @@ function updateAccount(){
 }
 function openAccount(){
  if(!DB.configured){requireSignIn();return;}
+ if(DB.state.recovery){openAuthForm('reset');return;}
  if(DB.state.user){openInfo('Your account',`<p>Signed in as <strong>${esc(DB.state.user.email)}</strong>.</p><p>Your requests and documents are stored securely with access for your account and authorized staff.</p><button class="secondary" id="sign-out">Sign out</button>`);$('#sign-out').onclick=e=>run(async()=>{await DB.signOut();resetPrivateState();updateAccount();view('home');toast('Signed out.');},e.currentTarget);return;}
- openInfo('Sign in to Medicycle',`<p>Enter your email and we’ll send a secure sign-in link. New customers can use the same form to create an account.</p><form id="login-form"><label>Email address<input type="email" name="email" autocomplete="email" required maxlength="254" placeholder="you@organisation.com"></label><p class="micro">Open the link in this same browser to finish signing in.</p><p id="login-feedback" class="form-feedback" role="status"></p><button class="primary field-gap">Send sign-in link</button></form>`);
- $('#login-form').onsubmit=e=>{e.preventDefault();const feedback=$('#login-feedback');run(async()=>{
- const email=new FormData(e.target).get('email').trim();
- try{await DB.signIn(email);feedback.textContent='Check your email for your sign-in link. If it does not arrive, check spam or contact our team.';e.target.querySelector('button').textContent='Resend sign-in link';}catch(error){feedback.textContent=error.message;throw error;}
- },e.submitter)};
+ openAuthForm('signin');
+}
+function openAuthForm(mode){
+ const signup=mode==='signup',forgot=mode==='forgot',reset=mode==='reset';
+ const title=signup?'Create your account':forgot?'Forgot password?':reset?'Choose a new password':'Welcome back';
+ openInfo(title,`<p>${signup?'Enter your details to get started.':forgot?'We’ll email you a link to choose a new password. Open it in this browser.':reset?'Set a new password for your Medicycle account.':'Sign in with your email and password.'}</p>
+ <form id="login-form">
+ ${signup?'<label class="field-gap">Full name<input name="name" autocomplete="name" required maxlength="120"></label>':''}
+ ${!reset?'<label class="field-gap">Email address<input type="email" name="email" autocomplete="email" required maxlength="254" placeholder="you@organisation.com"></label>':''}
+ ${!forgot?`<label class="field-gap">${reset?'New password':'Password'}<input type="password" name="password" autocomplete="${signup||reset?'new-password':'current-password'}" required ${signup||reset?'minlength="8"':''} maxlength="128"></label><button type="button" class="text-button" id="toggle-password" aria-pressed="false">Show password</button>${signup||reset?'<p class="micro">Use at least 8 characters.</p>':''}`:''}
+ ${reset?'<label class="field-gap">Confirm new password<input type="password" name="confirm" autocomplete="new-password" required minlength="8" maxlength="128"></label>':''}
+ <p id="login-feedback" class="form-feedback" role="status" aria-live="polite"></p>
+ <button class="primary field-gap" type="submit">${signup?'Create account':forgot?'Send reset link':reset?'Save new password':'Sign in'}</button></form>
+ <div class="auth-actions">${!signup&&!forgot&&!reset?'<button class="text-button" data-auth="forgot">Forgot password?</button><button class="text-button" data-auth="signup">New here? Create an account</button>':''}${signup||forgot?'<button class="text-button" data-auth="signin">Back to sign in</button>':''}</div>`);
+ $$('[data-auth]').forEach(b=>b.onclick=()=>openAuthForm(b.dataset.auth));
+ const toggle=$('#toggle-password');if(toggle)toggle.onclick=()=>{const input=$('#login-form input[name="password"]'),show=input.type==='password';input.type=show?'text':'password';toggle.textContent=show?'Hide password':'Show password';toggle.setAttribute('aria-pressed',String(show));};
+ $('#login-form').onsubmit=e=>{e.preventDefault();const form=e.target,feedback=$('#login-feedback'),data=new FormData(form);run(async()=>{
+  feedback.textContent='';
+  try{
+   const email=String(data.get('email')||'').trim(),password=String(data.get('password')||'');
+   if(forgot){await DB.forgotPassword(email);feedback.textContent='If an account exists for this email, a reset link has been requested. Check your inbox and spam folder.';return;}
+   if(reset){if(password!==data.get('confirm'))throw new Error('Passwords do not match.');await DB.resetPassword(password);form.reset();$('#info-dialog').close();toast('Password updated. You are signed in.');return;}
+   const name=String(data.get('name')||'').trim();if(signup&&!name)throw new Error('Please enter your name.');
+   const result=signup?await DB.signUp(name,email,password):await DB.signIn(email,password);
+   if(!result.session){feedback.textContent='Your account needs email confirmation. Check your inbox, then sign in.';return;}
+   form.reset();$('#info-dialog').close();toast(signup?'Your account is ready. Welcome to Medicycle!':'You’re signed in.');
+  }catch(error){feedback.textContent=error.message;}
+ },e.submitter);};
 }
 async function boot(){
  $('#account-button').onclick=openAccount;
@@ -149,16 +173,17 @@ async function boot(){
  const callbackError=new URLSearchParams(location.hash.slice(1)).get('error_description')||new URLSearchParams(location.search).get('error_description');
  if(callbackError)toast('The sign-in link could not be used. Request a new link.');
  if(DB.client)DB.client.auth.onAuthStateChange((event,session)=>{
-  if(!['SIGNED_IN','SIGNED_OUT','USER_UPDATED'].includes(event))return;
+  if(!['SIGNED_IN','SIGNED_OUT','USER_UPDATED','PASSWORD_RECOVERY'].includes(event))return;
   const epoch=++authEpoch;
   // Supabase recommends deferring async API work outside the auth callback.
   setTimeout(async()=>{if(epoch!==authEpoch)return;try{
    const changed=DB.state.user?.id!==session?.user?.id;
    if(changed)resetPrivateState();
    await DB.applyUser(session?.user||null);if(epoch!==authEpoch)return;
-   updateAccount();if(DB.state.user)await refreshData();else view('home');
+   updateAccount();if(DB.state.recovery&&DB.state.user)openAuthForm('reset');if(DB.state.user)await refreshData();else view('home');
   }catch(error){DB.state.ready=true;DB.state.staff=false;updateAccount();toast(error.message);}},0);
  });
+ if(DB.state.recovery&&DB.state.user)openAuthForm('reset');
  if(DB.state.user&&new URLSearchParams(location.search).has('code'))history.replaceState(null,'',location.pathname);
 }
 
