@@ -6,15 +6,16 @@ const db=new PGlite();
 const alice='11111111-1111-4111-8111-111111111111',bob='22222222-2222-4222-8222-222222222222',staff='33333333-3333-4333-8333-333333333333';
 const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 await db.exec(`create role anon;create role authenticated;create schema auth;create schema storage;
- create table auth.users(id uuid primary key,email text);
+ create table auth.users(id uuid primary key,email text,created_at timestamptz default now(),raw_user_meta_data jsonb default '{}');
  create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
  grant usage on schema auth,storage to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,primary key(bucket_id,name));
  alter table storage.objects enable row level security;grant select,insert,delete on storage.objects to authenticated;
- insert into auth.users values('${alice}','alice@example.com'),('${bob}','bob@example.com'),('${staff}','staff@example.com');`);
+ insert into auth.users(id,email) values('${alice}','alice@example.com'),('${bob}','bob@example.com'),('${staff}','staff@example.com');`);
 await db.exec(await readFile('supabase/migrations/001_medicycle.sql','utf8'));
 await db.exec(await readFile('supabase/migrations/002_preserve_accepted_offers.sql','utf8'));
+await db.exec(await readFile('supabase/migrations/003_admin_dashboard.sql','utf8'));
 await db.query('insert into public.mc_staff_members(user_id) values($1)',[staff]);
 async function user(id){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');}
 const payload={organisation:'Test clinic',contact:'Alice',phone:'',city:'Bengaluru',intent:'Sell equipment',items:[{name:'Monitor',category:'Patient monitoring',quantity:1,condition:'Non-working'}],notes:''};
@@ -67,4 +68,39 @@ test('accepted offer cannot be altered by moving the request on hold',async()=>{
  await user(staff);await db.query('select mc_save_assessment($1,4,$2)',[id,{...assessment,stage:'On hold',collection:'Agreed appointment'}]);
  await assert.rejects(db.query('select mc_save_assessment($1,5,$2)',[id,{...assessment,stage:'On hold',quote:{...assessment.quote,amount:777}}]),/terms cannot/);
  await assert.rejects(db.query('select mc_save_assessment($1,5,$2)',[id,assessment]),/pre-offer/);
+});
+
+test('admin reports and user directory enforce server-side roles',async()=>{
+ await user(alice);await assert.rejects(db.query("select mc_admin_report('2020-01-01','2026-12-31','day')"),/Admin access/);
+ await assert.rejects(db.query("select mc_admin_users()"),/Super admin/);
+ await assert.rejects(db.query("select mc_set_admin($1,'super_admin')",[alice]),/Super admin/);
+ await user(staff);const r=(await db.query("select mc_admin_report('2020-01-01','2026-12-31','year') r")).rows[0].r;
+ assert.equal(r.total_users,3);assert.equal(r.signups.length,7);
+ await assert.rejects(db.query('select mc_admin_users()'),/Super admin/);
+ await assert.rejects(db.query("select mc_admin_report('2026-01-02','2026-01-01','day')"),/Invalid/);
+});
+test('super admins can grant and revoke roles with audit and last-admin protection',async()=>{
+ await db.exec("reset role;update mc_staff_members set role='super_admin'");await user(staff);
+ await assert.rejects(db.query("select mc_set_admin($1,'user')",[staff]),/last super admin/);
+ await db.query("select mc_set_admin($1,'admin')",[bob]);await user(bob);
+ assert.equal((await db.query('select mc_is_staff() yes')).rows[0].yes,true);
+ await assert.rejects(db.query("select mc_set_admin($1,'admin')",[alice]),/Super admin/);
+ await user(staff);assert.equal((await db.query("select mc_admin_users('bob',0) r")).rows[0].r.users[0].role,'admin');
+ await db.query("select mc_set_admin($1,'user')",[bob]);await user(bob);
+ assert.equal((await db.query('select mc_is_staff() yes')).rows[0].yes,false);
+ await db.exec('reset role');assert.equal((await db.query('select count(*)::int n from mc_admin_audit')).rows[0].n,2);
+});
+test('tracking validates actions, excludes admins and hides raw events',async()=>{
+ await user(alice);await db.query("select mc_track('device_view','monitor')");
+ await assert.rejects(db.query("select mc_track('arbitrary','monitor')"),/Invalid/);
+ await assert.rejects(db.query('select * from mc_activity'),/permission denied/);
+ await user(staff);await db.query("select mc_track('device_view','monitor')");
+ await db.exec('reset role');assert.equal((await db.query('select count(*)::int n from mc_activity')).rows[0].n,1);
+ await db.exec('set role anon');await assert.rejects(db.query("select mc_track('device_view','monitor')"),/permission denied/);
+});
+test('signup buckets respect India midnight, inclusive dates and zero periods',async()=>{
+ await db.exec("reset role;update auth.users set created_at='2026-09-19T18:30:00Z' where email='alice@example.com';update auth.users set created_at='2026-09-19T18:29:59Z' where email='bob@example.com';update auth.users set created_at='2020-01-01T00:00:00Z' where email='staff@example.com'");
+ await user(staff);const r=(await db.query("select mc_admin_report('2026-09-20','2026-09-21','day') r")).rows[0].r;
+ assert.equal(r.new_users,1);assert.deepEqual(r.signups,[{period:'2026-09-20',count:1},{period:'2026-09-21',count:0}]);
+ await assert.rejects(db.query("select mc_admin_report('2026-01-01','2026-01-02','hour')"),/Invalid/);
 });

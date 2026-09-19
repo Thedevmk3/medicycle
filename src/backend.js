@@ -122,3 +122,14 @@ export async function downloadAttachment(path) {
   requireUser();
   return checked(await client.storage.from('mc-documents').createSignedUrl(path,60,{download:true})).signedUrl;
 }
+
+export async function adminRole(){requireUser();return checked(await client.rpc('mc_admin_role'));}
+export async function adminReport(from,to,period){requireUser();return checked(await client.rpc('mc_admin_report',{p_from:from,p_to:to,p_period:period}));}
+export async function adminUsers(search,offset){requireUser();return checked(await client.rpc('mc_admin_users',{p_search:search,p_offset:offset}));}
+export async function setAdmin(user,role){requireUser();checked(await client.rpc('mc_set_admin',{p_user:user,p_role:role}));}
+const tracked=new Map();
+export function track(action,device=null){
+ if(!state.user||state.staff||!state.ready)return;
+ const key=state.user.id+action+(device||''),now=Date.now();if(now-(tracked.get(key)||0)<2000)return;tracked.set(key,now);
+ void client.rpc('mc_track',{p_action:action,p_device:device}).catch(()=>{});
+}

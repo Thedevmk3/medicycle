@@ -1,4 +1,5 @@
 import * as DB from './backend.js';
+import {openAdmin,clearAdmin} from './admin.js';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>'₹'+Number(n).toLocaleString('en-IN');
@@ -27,12 +28,14 @@ function celebrateSignup(){
  setTimeout(()=>banner.remove(),6500);
 }
 function view(v){
- if(!['home','sell','market','requests','staff'].includes(v))throw Error('Unknown view');
- if(['sell','requests','staff'].includes(v)&&!requireSignIn())return 'sign-in';
- if(v==='staff'&&!DB.state.staff){toast('Staff access is required.');return 'home';}
+ if(!['home','sell','market','requests','staff','admin'].includes(v))throw Error('Unknown view');
+ if(['sell','requests','staff','admin'].includes(v)&&!requireSignIn())return 'sign-in';
+ if(['staff','admin'].includes(v)&&!DB.state.staff){toast('Staff access is required.');return 'home';}
  $$('.view').forEach(e=>e.hidden=e.id!==v+'-view');
  $$('.nav').forEach(e=>e.classList.toggle('active',e.dataset.view===v||(v==='sell'&&e.dataset.view==='home')));
  if(v==='requests'||v==='staff')run(async()=>{await refreshData();renderRequests();});
+ if(v==='admin')void openAdmin();else clearAdmin();
+ if(v==='market')DB.track('catalogue_view');if(v==='sell')DB.track('assessment_start');
  window.scrollTo({top:0,behavior:'instant'});return v;
 }
 $$('[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));$$('.brand').forEach(a=>a.onclick=e=>{e.preventDefault();view('home')});
@@ -43,7 +46,7 @@ $('#submit-featured').onclick=()=>{view('sell');const row=$('.device-row');row.q
 $('#eligibility-open').onclick=()=>openInfo('Equipment suitability','<p>Describe medical devices used in monitoring, therapy, diagnostics, emergency care or laboratories. Acceptance depends on the individual equipment, its condition and location.</p><p>Identify ownership or documentation gaps, contamination concerns, patient-data storage and specialist handling requirements. Furniture and other non-device items need a separate review.</p><p>Our team confirms eligibility and collection coverage after reviewing your enquiry.</p>');
 function renderCatalogue(){const query=$('#search').value.trim().toLowerCase(),cat=$('#category').value;const list=devices.filter(d=>(!savedOnly||saved.has(d.id))&&(cat==='all'||d.category===cat)&&(d.name+' '+d.category).toLowerCase().includes(query));$('#cards').innerHTML=list.map(d=>`<article class="device-card"><div class="card-art"><span class="badge">Exploded concept</span><button class="save ${saved.has(d.id)?'on':''}" data-save="${d.id}" aria-label="${saved.has(d.id)?'Unsave':'Save'} ${d.name}" aria-pressed="${saved.has(d.id)}">${saved.has(d.id)?'♥':'♡'}</button><img src="assets/${d.img}" width="1536" height="1024" alt="Exploded 3D illustration of ${d.name}" loading="lazy"></div><div class="card-info"><span class="card-meta">${d.category}</span><h3>${d.name}</h3><p class="location">Illustrative example · Availability by enquiry</p><div class="card-price"><span>Request equipment details</span><button data-detail="${d.id}">Explore ↗</button></div></div></article>`).join('');$('#count').textContent=list.length;$('#saved-count').textContent=saved.size;$('#empty').hidden=list.length>0;$$('[data-save]').forEach(b=>b.onclick=()=>{if(!requireSignIn())return;run(async()=>{const id=b.dataset.save,add=!saved.has(id);await DB.saveDevice(id,add);add?saved.add(id):saved.delete(id);renderCatalogue();},b)});$$('[data-detail]').forEach(b=>b.onclick=()=>deviceDetail(b.dataset.detail));return list.map(({id,name,category})=>({id,name,category}));}
 $('#search').oninput=renderCatalogue;$('#category').onchange=renderCatalogue;function stock(only){savedOnly=only;$('#all-stock').classList.toggle('selected',!only);$('#saved-stock').classList.toggle('selected',only);renderCatalogue()}$('#all-stock').onclick=()=>stock(false);$('#saved-stock').onclick=()=>stock(true);$('#reset-filters').onclick=()=>{$('#search').value='';$('#category').value='all';stock(false)};
-function deviceDetail(id){const d=devices.find(x=>x.id===id);if(!d)return;
+function deviceDetail(id){const d=devices.find(x=>x.id===id);if(!d)return;DB.track('device_view',id);
  $('#detail-content').innerHTML=`<p class="eyebrow">DEVICE CATEGORY · ILLUSTRATIVE EXAMPLE</p><div class="detail-grid"><div><img src="assets/${d.img}" alt="Exploded concept of ${d.name}"><p class="micro">Concept render only. Ask for actual unit photos, condition and test documentation.</p></div><div><h2>${d.name}</h2><p>${d.description}</p><div class="component-tags">${d.parts.map(x=>`<span>${x}</span>`).join('')}</div><h3>Before buying a refurbished unit</h3><p>Confirm the model, accessories, inspection results and warranty or service terms.</p><button class="primary" id="enquire-device">Enquire about this equipment ↗</button><a class="whatsapp-inline field-gap" href="${whatsappURL('Hello Medicycle, I would like to know more about a '+d.name.toLowerCase()+'.')}" target="_blank" rel="noopener noreferrer">Ask our team on WhatsApp ↗</a></div></div>`;
  $('#detail-dialog').showModal();$('#enquire-device').onclick=()=>{if(!requireSignIn())return;
  openInfo('Equipment enquiry',`<p>Tell us what you need from a ${d.name.toLowerCase()}. Our team will confirm availability.</p><form id="buyer-form"><p class="micro">Signed in as ${esc(DB.state.user.email)}</p><label>Your requirements<textarea required name="requirements" rows="3" maxlength="2000" placeholder="Model, quantity, budget or required accessories"></textarea></label><p id="buyer-feedback" class="form-feedback" role="status"></p><button class="primary field-gap">Send enquiry</button></form>`);
@@ -116,7 +119,7 @@ let refreshGeneration=0,authEpoch=0;
 function whatsappURL(message='Hello Medicycle, I would like to discuss medical equipment.') {
  return 'https://wa.me/917676888427?text='+encodeURIComponent(message);
 }
-function resetPrivateState(){refreshGeneration++;requests=[];buyerEnquiries=[];saved.clear();submissionId=null;intakePhotos.forEach(a=>URL.revokeObjectURL(a.url));if(inventoryFile)URL.revokeObjectURL(inventoryFile.url);intakePhotos=[];inventoryFile=null;$('#sell-form').reset();$('#photo-previews').replaceChildren();$('#inventory-name').textContent='';$('#device-rows').replaceChildren();rowCounter=0;addDevice();$$('dialog[open]').forEach(d=>d.close());$('#detail-content').replaceChildren();$('#info-content').replaceChildren();renderRequests();renderCatalogue();}
+function resetPrivateState(){clearAdmin();refreshGeneration++;requests=[];buyerEnquiries=[];saved.clear();submissionId=null;intakePhotos.forEach(a=>URL.revokeObjectURL(a.url));if(inventoryFile)URL.revokeObjectURL(inventoryFile.url);intakePhotos=[];inventoryFile=null;$('#sell-form').reset();$('#photo-previews').replaceChildren();$('#inventory-name').textContent='';$('#device-rows').replaceChildren();rowCounter=0;addDevice();$$('dialog[open]').forEach(d=>d.close());$('#detail-content').replaceChildren();$('#info-content').replaceChildren();renderRequests();renderCatalogue();}
 function requireSignIn(){
  if(!DB.configured){openInfo('Let’s talk about your equipment',`<p>Online accounts are being set up. Our team can help you through WhatsApp in the meantime.</p><a class="primary" href="${whatsappURL()}" target="_blank" rel="noopener noreferrer">Chat on WhatsApp ↗</a>`);return false;}
  if(!DB.state.ready){toast('Please wait while we check your account.');return false;}
@@ -144,6 +147,7 @@ function updateAccount(){
   account.setAttribute('aria-label','Open profile for '+name);account.title='Open profile';
  }else{account.textContent='Sign in';account.removeAttribute('aria-label');account.removeAttribute('title');}
  $('#staff-button').hidden=!DB.state.staff;
+ $('#admin-button').hidden=!DB.state.staff;
  $('#connection-notice').hidden=DB.configured;
  $('#account-loading').hidden=DB.state.ready;
  const email=$('#sell-form input[name="email"]');email.value=DB.state.user?.email||'';email.readOnly=true;
@@ -182,6 +186,7 @@ function openAuthForm(mode){
  },e.submitter);};
 }
 async function boot(){
+ document.addEventListener('click',e=>{if(e.target.closest('a[href^="https://wa.me/"]'))DB.track('whatsapp_click');});
  $('#account-button').onclick=openAccount;
  $$('.refresh-records').forEach(b=>b.onclick=()=>run(refreshData,b));
  const toggle=$('#whatsapp-toggle'),panel=$('#whatsapp-panel');

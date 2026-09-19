@@ -69,3 +69,14 @@ Before opening to customers, run an end-to-end check with two customer accounts 
 - Files are private but are not malware-scanned. Supported formats are constrained to images, PDF, CSV and XLSX; never upload patient information.
 - Equipment acceptance, inspection, collection coverage, sale terms and refurbishment suitability are handled by the business. Illustrations are not manufacturer service diagrams.
 - Medicycle remains the working brand and is not affiliated with the Australian reference business.
+
+## Admin dashboard setup (manual SQL)
+
+1. Ensure migrations `001_medicycle.sql` and `002_preserve_accepted_offers.sql` have already been applied. Do not rerun 001.
+2. Run `supabase/migrations/003_admin_dashboard.sql` once in the Supabase SQL Editor. It adds reports, permission management and activity tracking. Existing staff remain admins; no user is automatically made a super admin.
+3. Open `supabase/setup/first_super_admin.sql`, replace `REPLACE_WITH_YOUR_EMAIL` with your existing Medicycle account email, and run it. This is the initial owner setup; later role changes belong in the dashboard.
+4. Sign out and back in. Select **Admin dashboard** in the header. Super admins can search users and change them between User, Admin and Super admin. Regular admins can see reports and handle equipment requests. The database blocks removing the final super admin and records permission changes.
+
+Reports use India time (Asia/Kolkata), inclusive date ranges, and Monday-start weeks. Choose day/week/month/year grouping. New-user counts come from current Supabase Auth accounts' creation dates; deleted accounts are no longer counted. Equipment submissions come from actual saved records. Device views, catalogue views, assessment starts and WhatsApp clicks start collecting after this release and migration, for signed-in customers only; staff activity is excluded. No anonymous tracking, message contents, passwords or form contents are stored in activity events. Browser events are approximate, deduplicated for two seconds and capped at 60 per user per minute. WhatsApp clicks do not indicate messages sent. Raw activity is not exposed to clients. Aggregated reports and the latest 30 permission changes are shown in the dashboard.
+
+Until the migration is run, customer workflows continue to work; the admin dashboard shows a setup error. No SQL changes are applied automatically by the build or deployment. Forgot-password delivery and real Supabase end-to-end checks remain separate from the local database tests.
