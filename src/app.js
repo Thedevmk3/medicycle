@@ -139,9 +139,9 @@ function updateAccount(){
  const name=[metadata?.full_name,metadata?.name,user?.email?.split('@')[0]].find(value=>typeof value==='string'&&value.trim())?.trim()||'Profile';
  account.classList.toggle('profile-button',Boolean(user));
  if(user){
-  account.innerHTML='<svg class="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg><span class="profile-name"></span>';
-  account.querySelector('.profile-name').textContent=name;
-  account.setAttribute('aria-label','Open profile for '+name);account.title=name;
+  const initials=name.split(/\s+/).slice(0,2).map(part=>Array.from(part)[0]).join('').toLocaleUpperCase();
+  account.textContent=initials;
+  account.setAttribute('aria-label','Open profile for '+name);account.title='Open profile';
  }else{account.textContent='Sign in';account.removeAttribute('aria-label');account.removeAttribute('title');}
  $('#staff-button').hidden=!DB.state.staff;
  $('#connection-notice').hidden=DB.configured;
